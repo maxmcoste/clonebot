@@ -1,0 +1,205 @@
+"""CLI interface for CloneBot."""
+
+from pathlib import Path
+
+import typer
+from rich.console import Console
+from rich.panel import Panel
+from rich.prompt import Prompt
+from rich.table import Table
+from rich.live import Live
+from rich.text import Text
+
+from dotenv import load_dotenv
+
+load_dotenv()
+
+app = typer.Typer(name="clonebot", help="Digital Person Clone - Chat with memories")
+console = Console()
+
+
+@app.command()
+def create(
+    name: str = typer.Argument(help="Name of the clone to create"),
+    description: str = typer.Option("", "--description", "-d", help="Description of the person"),
+    traits: str = typer.Option("", "--traits", "-t", help="Comma-separated personality traits"),
+    language: str = typer.Option("english", "--language", "-l", help="Response language (english, italian)"),
+):
+    """Create a new clone profile."""
+    from clonebot.core.clone import CloneProfile, SUPPORTED_LANGUAGES
+
+    lang = language.lower()
+    if lang not in SUPPORTED_LANGUAGES:
+        console.print(f"[red]Unsupported language '{language}'. Choose from: {', '.join(sorted(SUPPORTED_LANGUAGES))}[/red]")
+        raise typer.Exit(1)
+
+    personality = [t.strip() for t in traits.split(",") if t.strip()] if traits else []
+
+    profile = CloneProfile(
+        name=name,
+        description=description,
+        language=lang,
+        personality_traits=personality,
+    )
+    path = profile.save()
+    console.print(f"[green]Created clone '{name}' ({lang}) at {path.parent}[/green]")
+
+
+@app.command(name="list")
+def list_clones():
+    """List all clone profiles."""
+    from clonebot.core.clone import CloneProfile
+
+    clones = CloneProfile.list_all()
+    if not clones:
+        console.print("[yellow]No clones found. Create one with: clonebot create <name>[/yellow]")
+        return
+
+    table = Table(title="Clones")
+    table.add_column("Name", style="cyan")
+    table.add_column("Language", style="magenta")
+    table.add_column("Description")
+    table.add_column("Traits")
+
+    for clone in clones:
+        table.add_row(
+            clone.name,
+            clone.language,
+            clone.description or "-",
+            ", ".join(clone.personality_traits) if clone.personality_traits else "-",
+        )
+    console.print(table)
+
+
+@app.command()
+def ingest(
+    name: str = typer.Argument(help="Clone name"),
+    path: str = typer.Argument(help="File or directory to ingest"),
+):
+    """Ingest memory data into a clone."""
+    from clonebot.core.clone import CloneProfile
+    from clonebot.memory.ingest import ingest_file, ingest_directory
+    from clonebot.memory.embeddings import get_embedding_provider
+    from clonebot.memory.store import VectorStore
+
+    profile = CloneProfile.load(name)
+    file_path = Path(path).resolve()
+
+    if not file_path.exists():
+        console.print(f"[red]Path not found: {file_path}[/red]")
+        raise typer.Exit(1)
+
+    with console.status("[bold blue]Ingesting data..."):
+        if file_path.is_dir():
+            chunks = ingest_directory(file_path)
+        else:
+            chunks = ingest_file(file_path)
+
+        if not chunks:
+            console.print("[yellow]No data to ingest from the provided path.[/yellow]")
+            raise typer.Exit(1)
+
+        console.print(f"  Chunked into {len(chunks)} pieces")
+
+    with console.status("[bold blue]Generating embeddings and storing..."):
+        embedder = get_embedding_provider()
+        store = VectorStore(profile.get_dir(), embedder)
+        count = store.add_documents(chunks)
+
+    console.print(f"[green]Ingested {count} chunks into '{name}'[/green]")
+
+
+@app.command()
+def stats(name: str = typer.Argument(help="Clone name")):
+    """Show memory stats for a clone."""
+    from clonebot.core.clone import CloneProfile
+    from clonebot.memory.embeddings import get_embedding_provider
+    from clonebot.memory.store import VectorStore
+
+    profile = CloneProfile.load(name)
+    embedder = get_embedding_provider()
+    store = VectorStore(profile.get_dir(), embedder)
+    info = store.stats()
+
+    panel = Panel(
+        f"[cyan]Clone:[/cyan] {profile.name}\n"
+        f"[cyan]Language:[/cyan] {profile.language}\n"
+        f"[cyan]Description:[/cyan] {profile.description or '-'}\n"
+        f"[cyan]Traits:[/cyan] {', '.join(profile.personality_traits) or '-'}\n"
+        f"[cyan]Total chunks:[/cyan] {info['total_chunks']}\n"
+        f"[cyan]DB path:[/cyan] {info['db_path']}",
+        title=f"Stats: {name}",
+    )
+    console.print(panel)
+
+
+@app.command()
+def chat(
+    name: str = typer.Argument(help="Clone name"),
+    provider: str = typer.Option(None, "--provider", "-p", help="LLM provider override"),
+    model: str = typer.Option(None, "--model", "-m", help="Model name override"),
+):
+    """Start an interactive chat session with a clone."""
+    from clonebot.core.clone import CloneProfile
+    from clonebot.core.session import ChatSession
+    from clonebot.memory.embeddings import get_embedding_provider
+    from clonebot.memory.store import VectorStore
+    from clonebot.rag.retriever import Retriever
+    from clonebot.llm.provider import get_llm_provider
+    from clonebot.config.settings import get_settings
+
+    settings = get_settings()
+    if provider:
+        settings.llm_provider = provider
+    if model:
+        settings.llm_model = model
+
+    profile = CloneProfile.load(name)
+    embedder = get_embedding_provider()
+    store = VectorStore(profile.get_dir(), embedder)
+    retriever = Retriever(store)
+    llm = get_llm_provider()
+
+    session = ChatSession(
+        clone=profile,
+        llm=llm,
+        store=store,
+        retriever=retriever,
+    )
+
+    console.print(Panel(
+        f"Chatting with [bold cyan]{profile.name}[/bold cyan]\n"
+        f"Language: {profile.language}\n"
+        f"Memories: {store.count()} chunks loaded\n"
+        f"Provider: {settings.llm_provider} / {settings.llm_model}\n"
+        f"Type [bold]quit[/bold] or [bold]exit[/bold] to end",
+        title="CloneBot Chat",
+    ))
+
+    while True:
+        try:
+            user_input = Prompt.ask(f"\n[bold green]You[/bold green]")
+        except (KeyboardInterrupt, EOFError):
+            break
+
+        if user_input.strip().lower() in ("quit", "exit", "q"):
+            break
+
+        if not user_input.strip():
+            continue
+
+        console.print(f"\n[bold cyan]{profile.name}[/bold cyan]", end="")
+        try:
+            response_text = Text()
+            with Live(response_text, console=console, refresh_per_second=15) as live:
+                for chunk in session.chat_stream(user_input):
+                    response_text.append(chunk)
+                    live.update(response_text)
+        except Exception as e:
+            console.print(f"\n[red]Error: {e}[/red]")
+
+    console.print("\n[dim]Chat ended.[/dim]")
+
+
+if __name__ == "__main__":
+    app()

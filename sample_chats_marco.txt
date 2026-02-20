@@ -1,0 +1,26 @@
+Luca: Ciao Marco, com'è andato il weekend?
+Marco: Fantastico! Sono andato a fare un'escursione sulle Dolomiti. Le viste dalla cima erano incredibili.
+Luca: Bello! Quanto era lungo il percorso?
+Marco: Circa 12 chilometri andata e ritorno. Ho preso il sentiero che passa per il Lago di Braies e poi sono salito verso il rifugio.
+Luca: Sembra impegnativo! Sei andato da solo?
+Marco: Sì, preferisco le escursioni in solitaria. Mi danno tempo per pensare e staccare dal lavoro.
+Luca: A proposito di lavoro, come va il nuovo progetto?
+Marco: La migrazione ai microservizi? Sta andando bene. Abbiamo appena finito di containerizzare il servizio di autenticazione.
+Luca: State usando Kubernetes per l'orchestrazione?
+Marco: Sì, K8s con Helm charts. Ci è voluto un po' per configurare tutto, ma ora i deploy sono fluidi.
+Luca: Bene. In che linguaggio state scrivendo i servizi?
+Marco: Principalmente Go per i servizi backend. È perfetto per i workload concorrenti. Python per la pipeline di machine learning però.
+Luca: Hai sempre amato Go. Ti ricordi quando hai convinto tutto il team a fare il passaggio?
+Marco: Ah! È stata una bella discussione. Ma i miglioramenti nelle performance hanno parlato da soli.
+Luca: Vero. Ehi, vieni alla cena di squadra venerdì?
+Marco: Non me la perderei! Ho sentito che hanno prenotato quella nuova trattoria in centro.
+Luca: Sì, Trattoria da Nonna Rosa. La loro pasta fresca pare sia eccezionale.
+Marco: Sono entusiasta. Ultimamente ho cucinato soprattutto piatti della tradizione romana.
+Luca: Ah giusto, avevi detto che ti sei messo a cucinare! Cosa hai preparato?
+Marco: Tanta carbonara fatta come si deve, con il guanciale e il pecorino. Poi ho sperimentato con la cacio e pepe e l'amatriciana.
+Luca: Che buono. Dovresti portare qualcosa alla prossima grigliata!
+Marco: Sicuramente. Preparerò la mia carbonara. È il mio piatto migliore finora.
+Luca: E per il calcio? Hai visto la partita della Roma domenica?
+Marco: Certo! Non me ne perdo una. Dybala ha fatto un gol pazzesco, una giocata da fuoriclasse.
+Luca: Sì, incredibile. Vai ancora allo stadio?
+Marco: Quando posso, ho l'abbonamento in Curva Sud. L'atmosfera all'Olimpico è unica.

@@ -1,0 +1,22 @@
+Alice: Hey John, how was your weekend?
+John: It was amazing! I went hiking at Mount Tamalpais. The views from the summit were incredible.
+Alice: Oh nice! How long was the hike?
+John: About 8 miles round trip. I took the Dipsea Trail and looped back via the Steep Ravine Trail.
+Alice: That sounds challenging! Did you go alone?
+John: Yeah, I usually prefer solo hikes. It gives me time to think and decompress from work.
+Alice: Speaking of work, how's that new project going?
+John: The microservices migration? It's going well actually. We just finished containerizing the auth service.
+Alice: Are you using Kubernetes for orchestration?
+John: Yep, K8s with Helm charts. Took a while to get the config right but now deployments are smooth.
+Alice: Nice. What language are you writing the services in?
+John: Mostly Go for the backend services. It's perfect for concurrent workloads. Python for the ML pipeline though.
+Alice: You always did love Go. Remember when you convinced the whole team to switch?
+John: Ha! That was a fun debate. But the performance improvements spoke for themselves.
+Alice: True. Hey, are you going to the team dinner on Friday?
+John: Wouldn't miss it! I heard they booked that new Italian place downtown.
+Alice: Yeah, Osteria Bella. Their pasta is supposed to be incredible.
+John: I'm excited. I've been meaning to try more Italian food. My cooking has been mostly Asian-inspired lately.
+Alice: Oh right, you mentioned you've been getting into cooking! What have you been making?
+John: Lots of ramen from scratch. Making the broth takes forever but it's so worth it. Also been experimenting with Thai curries.
+Alice: That sounds delicious. You should bring something to the next potluck!
+John: Definitely. I'll make my tonkotsu ramen. It's my best dish so far.
