@@ -1,6 +1,9 @@
 """CLI interface for CloneBot."""
 
+import os
 from pathlib import Path
+
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 import typer
 from rich.console import Console
@@ -75,10 +78,13 @@ def list_clones():
 def ingest(
     name: str = typer.Argument(help="Clone name"),
     path: str = typer.Argument(help="File or directory to ingest"),
+    tags: str = typer.Option("", "--tags", "-t", help="Comma-separated tags (e.g. 'daughter,birthday')"),
+    description: str = typer.Option("", "--description", "-d", help="Manual description of the media"),
+    no_vision: bool = typer.Option(False, "--no-vision", help="Skip AI vision analysis (requires --description for media)"),
 ):
     """Ingest memory data into a clone."""
     from clonebot.core.clone import CloneProfile
-    from clonebot.memory.ingest import ingest_file, ingest_directory
+    from clonebot.memory.ingest import ingest_file, ingest_directory, IMAGE_EXTENSIONS, VIDEO_EXTENSIONS
     from clonebot.memory.embeddings import get_embedding_provider
     from clonebot.memory.store import VectorStore
 
@@ -89,11 +95,22 @@ def ingest(
         console.print(f"[red]Path not found: {file_path}[/red]")
         raise typer.Exit(1)
 
+    # Parse tags
+    tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else None
+
+    # Validate: --no-vision on media files requires --description
+    use_vision = not no_vision
+    if no_vision and file_path.is_file():
+        suffix = file_path.suffix.lower()
+        if suffix in IMAGE_EXTENSIONS | VIDEO_EXTENSIONS and not description:
+            console.print("[red]--no-vision requires --description for media files[/red]")
+            raise typer.Exit(1)
+
     with console.status("[bold blue]Ingesting data..."):
         if file_path.is_dir():
-            chunks = ingest_directory(file_path)
+            chunks = ingest_directory(file_path, tags=tag_list, description=description, use_vision=use_vision)
         else:
-            chunks = ingest_file(file_path)
+            chunks = ingest_file(file_path, tags=tag_list, description=description, use_vision=use_vision)
 
         if not chunks:
             console.print("[yellow]No data to ingest from the provided path.[/yellow]")

@@ -4,18 +4,32 @@ import csv
 import io
 import json
 import re
+import shutil
 from pathlib import Path
 
 from clonebot.memory.chunker import Chunk, chunk_text, chunk_chat_messages
 from clonebot.config.settings import get_settings
 
+IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
+VIDEO_EXTENSIONS = {".mp4", ".mov", ".avi", ".mkv"}
+TEXT_EXTENSIONS = {".txt", ".md", ".json", ".pdf", ".csv", ".docx"}
 
-def ingest_file(file_path: Path) -> list[Chunk]:
+
+def ingest_file(
+    file_path: Path,
+    tags: list[str] | None = None,
+    description: str = "",
+    use_vision: bool = True,
+) -> list[Chunk]:
     """Ingest a single file and return chunks."""
     suffix = file_path.suffix.lower()
     meta = {"source": file_path.name, "source_path": str(file_path)}
 
-    if suffix in (".txt", ".md"):
+    if suffix in IMAGE_EXTENSIONS:
+        return _ingest_image(file_path, meta, tags=tags, description=description, use_vision=use_vision)
+    elif suffix in VIDEO_EXTENSIONS:
+        return _ingest_video(file_path, meta, tags=tags, description=description, use_vision=use_vision)
+    elif suffix in (".txt", ".md"):
         return _ingest_text(file_path, meta)
     elif suffix == ".json":
         return _ingest_json(file_path, meta)
@@ -29,16 +43,139 @@ def ingest_file(file_path: Path) -> list[Chunk]:
         raise ValueError(f"Unsupported file type: {suffix}")
 
 
-def ingest_directory(dir_path: Path) -> list[Chunk]:
+def ingest_directory(
+    dir_path: Path,
+    tags: list[str] | None = None,
+    description: str = "",
+    use_vision: bool = True,
+) -> list[Chunk]:
     """Ingest all supported files in a directory."""
-    supported = {".txt", ".md", ".json", ".pdf", ".csv", ".docx"}
+    supported = TEXT_EXTENSIONS | IMAGE_EXTENSIONS | VIDEO_EXTENSIONS
     all_chunks: list[Chunk] = []
 
     for f in sorted(dir_path.rglob("*")):
         if f.is_file() and f.suffix.lower() in supported:
-            all_chunks.extend(ingest_file(f))
+            all_chunks.extend(ingest_file(f, tags=tags, description=description, use_vision=use_vision))
 
     return all_chunks
+
+
+def _build_media_text(
+    media_type: str,
+    filename: str,
+    tags: list[str] | None,
+    description: str,
+    analysis: str,
+) -> str:
+    """Compose chunk text with header, tags, description, and analysis."""
+    parts = [f"[{media_type} memory: {filename}]"]
+
+    if tags:
+        parts.append(f"Tags: {', '.join(tags)}")
+
+    if description:
+        parts.append(f"Description: {description}")
+
+    if analysis:
+        parts.append(f"\n{analysis}")
+
+    return "\n".join(parts)
+
+
+def _ingest_image(
+    path: Path,
+    meta: dict[str, str],
+    tags: list[str] | None = None,
+    description: str = "",
+    use_vision: bool = True,
+) -> list[Chunk]:
+    """Ingest a photo, optionally using vision AI for analysis."""
+    meta["format"] = "photo"
+    if tags:
+        meta["tags"] = ",".join(tags)
+
+    analysis = ""
+    if use_vision:
+        from clonebot.media.vision import get_vision_analyzer
+        analyzer = get_vision_analyzer()
+        context = description or ""
+        if tags:
+            context = f"{context} (people/tags: {', '.join(tags)})".strip()
+        analysis = analyzer.describe_image(path, context=context)
+
+    text = _build_media_text("Photo", path.name, tags, description, analysis)
+    return [Chunk(text=text, metadata={**meta, "chunk_index": "0"})]
+
+
+def _ingest_video(
+    path: Path,
+    meta: dict[str, str],
+    tags: list[str] | None = None,
+    description: str = "",
+    use_vision: bool = True,
+) -> list[Chunk]:
+    """Ingest a video: extract frames for vision analysis and audio for transcription."""
+    meta["format"] = "video"
+    if tags:
+        meta["tags"] = ",".join(tags)
+
+    frame_descriptions: list[str] = []
+    transcript = ""
+    temp_dirs: list[Path] = []
+
+    # Extract and analyze frames
+    if use_vision:
+        from clonebot.media.video import extract_frames
+        from clonebot.media.vision import get_vision_analyzer
+
+        frames = extract_frames(path)
+        if frames and frames[0].parent.exists():
+            temp_dirs.append(frames[0].parent)
+
+        analyzer = get_vision_analyzer()
+        context = description or ""
+        if tags:
+            context = f"{context} (people/tags: {', '.join(tags)})".strip()
+
+        for i, frame_path in enumerate(frames):
+            desc = analyzer.describe_image(frame_path, context=f"Frame {i + 1} of video. {context}")
+            frame_descriptions.append(f"[Frame {i + 1}] {desc}")
+
+    # Extract and transcribe audio
+    from clonebot.media.video import extract_audio
+    audio_path = extract_audio(path)
+    if audio_path:
+        if audio_path.parent.exists():
+            temp_dirs.append(audio_path.parent)
+        from clonebot.media.transcribe import transcribe_audio
+        transcript = transcribe_audio(audio_path)
+
+    # Build combined analysis
+    analysis_parts = []
+    if frame_descriptions:
+        analysis_parts.append("Visual analysis:\n" + "\n".join(frame_descriptions))
+    if transcript:
+        analysis_parts.append(f"Audio transcript:\n{transcript}")
+
+    analysis = "\n\n".join(analysis_parts)
+    text = _build_media_text("Video", path.name, tags, description, analysis)
+
+    # Clean up temp directories
+    for d in temp_dirs:
+        shutil.rmtree(d, ignore_errors=True)
+
+    chunks = [Chunk(text=text, metadata={**meta, "chunk_index": "0"})]
+
+    # If text is very long, split into additional chunks
+    settings = get_settings()
+    if len(text.split()) > settings.chunk_size:
+        chunks = chunk_text(text, chunk_size=settings.chunk_size, overlap=settings.chunk_overlap, metadata=meta)
+        for c in chunks:
+            c.metadata["format"] = "video"
+            if tags:
+                c.metadata["tags"] = ",".join(tags)
+
+    return chunks
 
 
 def _ingest_text(path: Path, meta: dict[str, str]) -> list[Chunk]:

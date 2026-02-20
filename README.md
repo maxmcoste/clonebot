@@ -65,6 +65,10 @@ cp .env.example .env
 | `OPENAI_API_KEY` | OpenAI API key (if using OpenAI provider) | — |
 | `ANTHROPIC_API_KEY` | Anthropic API key (if using Anthropic provider) | — |
 | `OLLAMA_BASE_URL` | Ollama server URL (if using Ollama provider) | `http://localhost:11434` |
+| `CLONEBOT_VISION_PROVIDER` | Vision LLM provider: `openai` or `anthropic` | `openai` |
+| `CLONEBOT_VISION_MODEL` | Vision model name | `gpt-4o` |
+| `CLONEBOT_VIDEO_MAX_FRAMES` | Max frames to extract from videos | `5` |
+| `CLONEBOT_WHISPER_MODEL` | OpenAI Whisper model for audio transcription | `whisper-1` |
 
 The `local` embedding provider uses [sentence-transformers](https://www.sbert.net/) and runs entirely on your machine with no API key required.
 
@@ -95,6 +99,28 @@ uv run clonebot ingest Marco ./sample_chats_marco.txt
 uv run clonebot ingest Marco ./data/marco/
 ```
 
+#### Media Memories (Photos & Videos)
+
+CloneBot can ingest photos and videos as visual memories. Images are analyzed by a vision-capable LLM and the description is stored as a searchable memory chunk. Videos get key frames extracted and analyzed, plus optional audio transcription.
+
+```bash
+# Ingest a photo with AI vision analysis and tags
+uv run clonebot ingest Marco photo.jpg --tags "daughter,birthday"
+
+# Ingest with a manual description (skip vision API)
+uv run clonebot ingest Marco photo.jpg --no-vision --description "Sarah's 5th birthday party" --tags "daughter"
+
+# Ingest a video (frames analyzed + audio transcribed)
+uv run clonebot ingest Marco vacation.mp4 --tags "hawaii,vacation"
+```
+
+**Flags:**
+- `--tags / -t` — comma-separated relationship or context tags (e.g. `"daughter,birthday"`)
+- `--description / -d` — manual text description of the media
+- `--no-vision` — skip AI vision analysis (requires `--description` for media files)
+
+**Vision providers:** Configure with `CLONEBOT_VISION_PROVIDER` (`openai` or `anthropic`) and `CLONEBOT_VISION_MODEL`. Audio transcription uses OpenAI Whisper. Video audio extraction requires `ffmpeg` (optional — gracefully skipped if not installed).
+
 #### Supported File Formats
 
 | Format | Extensions | Notes |
@@ -104,6 +130,8 @@ uv run clonebot ingest Marco ./data/marco/
 | CSV | `.csv` | Detects chat-like CSVs with sender/message columns |
 | PDF | `.pdf` | Extracts text from all pages |
 | Word | `.docx` | Extracts paragraph text |
+| Images | `.jpg`, `.jpeg`, `.png`, `.gif`, `.webp` | Vision AI analysis with relationship tags |
+| Videos | `.mp4`, `.mov`, `.avi`, `.mkv` | Frame extraction + vision analysis + audio transcription |
 
 ### List Clones
 
@@ -143,6 +171,10 @@ clonebot/
 ├── core/
 │   ├── clone.py        # Clone profile model (create, save, load)
 │   └── session.py      # Chat session with history management
+├── media/
+│   ├── vision.py       # Vision LLM analysis (OpenAI / Anthropic)
+│   ├── video.py        # Frame and audio extraction (OpenCV / ffmpeg)
+│   └── transcribe.py   # Audio transcription (OpenAI Whisper)
 ├── memory/
 │   ├── chunker.py      # Text and chat-aware chunking
 │   ├── embeddings.py   # Embedding providers (local / OpenAI)

@@ -20,6 +20,12 @@ class Settings(BaseSettings):
     embedding_model: str = "all-MiniLM-L6-v2"
     openai_embedding_model: str = "text-embedding-3-small"
 
+    # Vision / Media
+    vision_provider: str = "openai"
+    vision_model: str = "gpt-4o"
+    video_max_frames: int = 5
+    whisper_model: str = "whisper-1"
+
     # RAG
     chunk_size: int = 500
     chunk_overlap: int = 50
