@@ -68,6 +68,17 @@ class CloneProfile(BaseModel):
             partial = loader.load_partial("domain_closed")
             domain_rule = loader.render(partial).strip()
 
+        style_data = loader.load_style()
+        if style_data:
+            style_partial = loader.load_partial("style_guide")
+            style_guide = loader.render(
+                style_partial,
+                dimensions=style_data["dimensions"],
+                samples=style_data["samples"],
+            )
+        else:
+            style_guide = ""
+
         template = loader.load_template("system")
         return loader.render(
             template,
@@ -75,6 +86,7 @@ class CloneProfile(BaseModel):
             description=self.description,
             traits=traits,
             domain_rule=domain_rule,
+            style_guide=style_guide,
             memories=memories,
             language=self.language,
         )

@@ -10,6 +10,7 @@ KNOWLEDGE BOUNDARIES — follow these rules strictly:
    knowledge domains, honestly say you don't know or don't remember.
    Never fabricate answers.
 
+{style_guide}
 Here are your memories relevant to this conversation:
 
 {memories}

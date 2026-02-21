@@ -1,0 +1,189 @@
+CLONEBOT — WRITING STYLE SYSTEM PROPOSAL
+=========================================
+Date: 2026-02-21
+Based on: lessico/struttura.rtf
+
+
+THE 9 STYLE DIMENSIONS
+-----------------------
+The struttura.rtf document defines 9 linguistic dimensions that together
+form a person's unique voice:
+
+  1. Lessico (Vocabulary)
+     Word choice, register (colloquial / technical / poetic),
+     dominant semantic fields.
+
+  2. Sintassi (Syntax)
+     Sentence length, use of subordinates, word order inversions.
+
+  3. Ritmo (Rhythm)
+     Pauses, repetitions, anaphora, cadence.
+
+  4. Gergalità / Idioletto (Slang / Idiolect)
+     Jargon, slang, personal recurring linguistic tics.
+
+  5. Pragmatica (Pragmatics)
+     Communicative attitude: assertive, ironic, deferential,
+     dominant, empathetic...
+
+  6. Prosodia interiore (Emotional Tone)
+     Dominant emotional colour: cynical, optimistic, resigned,
+     enthusiastic...
+
+  7. Figuratività (Imagery)
+     Recurring metaphors, cultural references, dominant senses
+     (visual, auditory, tactile).
+
+  8. Coerenza stilistica (Stylistic Signature)
+     Recurring constructs, preferred words, typical verb tenses
+     that make a voice recognisable without a name.
+
+  9. Silenzi / Omissioni (Silences / Omissions)
+     Ellipses, reticences, half-sentences — what is deliberately
+     not said.
+
+
+PROGRAMMATIC APPROACHES
+------------------------
+
+Option A — Prompt Injection (selected / implemented)
+  Parse a per-clone style.md file and inject a STYLE GUIDE section
+  into the system prompt alongside a block of real writing samples
+  (few-shot anchors). The LLM reads both the structured dimensions
+  and the actual excerpts and is instructed to replicate that voice.
+
+  Prompt structure:
+    [persona block]
+    [KNOWLEDGE BOUNDARIES block]
+    [STYLE GUIDE block]        ← parsed from data/clones/<name>/style.md
+    [WRITING SAMPLES block]    ← real excerpts from style.md
+    [retrieved memories block]
+
+  Pro:  works immediately, zero infrastructure, fully editable
+  Con:  LLMs follow subtle stylistic cues (rhythm, omissions)
+        imperfectly; long prompts consume context window
+
+Option B — Style-tagged RAG (medium term)
+  Ingest writing samples with type=style_example metadata.
+  At chat time retrieve both relevant memories AND the most
+  stylistically relevant examples, injecting them as live anchors.
+  Scales naturally as more samples are added.
+
+  Pro:  grows with the corpus, uses existing infrastructure
+  Con:  style examples must stay clearly separated from factual
+        memories in the prompt; adds retrieval complexity
+
+Option C — LoRA Fine-tuning (long term, large corpus)
+  Train a LoRA adapter on top of an open model (Mistral, Llama 3,
+  Qwen) using the person's own writing as training data. The adapter
+  makes the model structurally produce that voice without needing
+  prompt instructions.
+
+  Pro:  deepest fidelity — rhythm, omissions, tics are reproduced
+        at the model level, not by instruction
+  Con:  requires ~500+ writing samples; GPU training (hours);
+        one adapter per clone; harder to update; requires local
+        model hosting (Ollama or equivalent)
+
+Recommended roadmap:
+  Phase 1 (now)             Option A — style.md + prompt injection
+  Phase 2 (corpus > 50)     Option B — style RAG
+  Phase 3 (fidelity focus)  Option C — LoRA fine-tuning
+
+
+STYLE FILE FORMAT
+-----------------
+File location:  data/clones/<name>/style.md
+Human-editable markdown with two sections:
+  - Structured dimensions (one heading per dimension)
+  - Writing Samples (real excerpts, one per blockquote)
+
+Example — data/clones/Marco/style.md:
+
+  # Writing Style: Marco
+
+  ## Dimensions
+
+  ### 1. Vocabulary
+  - Register: informal-technical mix; IT jargon blended with natural Italian
+  - Complexity: medium — precise but never pedantic
+  - Dominant fields: technology, work, food, family
+
+  ### 2. Syntax
+  - Sentence length: short to medium; rarely chains long subordinates
+  - Often drops explicit subjects (normal in Italian, but especially pronounced)
+  - Frequent mid-sentence corrections: "cioè…", "nel senso…"
+
+  ### 3. Rhythm
+  - Heavy use of "..." for trailing off or hesitation
+  - Fast repetitions for agreement or urgency: "sì sì", "dai dai", "no no no"
+  - Punchy closing statements after longer build-ups
+
+  ### 4. Slang / Idiolect
+  - "fratè" with close friends
+  - Italianised English verbs: "deploya", "mergere", "runnare"
+  - "sta roba" = this thing / stuff
+
+  ### 5. Pragmatics
+  - Mildly assertive; suggests rather than orders with familiars
+  - Irony as default deflection under pressure
+  - Ends rhetorical points with "no?" to invite agreement
+
+  ### 6. Emotional Tone
+  - Default: pragmatic optimism
+  - Under stress: dark humour, self-deprecating
+  - Rarely expresses vulnerability directly
+
+  ### 7. Imagery
+  - Metaphors from technology: "sistema", "buildare", "crashare"
+  - Metaphors from food: "digerire" a situation, "è amaro"
+  - Rarely poetic; concrete and visual
+
+  ### 8. Stylistic Signatures
+  - Starts explanations with "In pratica…"
+  - Self-corrects mid-sentence with "cioè…"
+  - Rhetorical close: "no?" / "capisci?"
+  - Present tense for immediacy even when recounting past events
+
+  ### 9. Silences / Omissions
+  - Trails off with "..." rather than stating discomfort directly
+  - Changes subject abruptly when topic is too personal
+  - Leaves instructions implicit: expects interlocutor to fill in the rest
+
+  ## Writing Samples
+
+  > Senti, in pratica il problema è che non si capisce niente della
+  > documentazione, cioè, è scritta bene... ma non dice niente di
+  > utile, capisci?
+
+  > Dai fratè, deployiamo e vediamo. Se crasha sistemiamo dopo.
+
+  > L'ho visto, sì. Era lì. Basta.
+
+  > In pratica ho digerito la cosa, però... non so, ci vuole tempo.
+
+
+CODEBASE CHANGES (Option A)
+----------------------------
+
+New files:
+  clonebot/prompts/partials/style_guide.md
+      Template for the STYLE GUIDE block injected into the system prompt.
+      Variables: {dimensions}, {samples}
+
+  data/clones/<name>/style.md
+      Per-clone style profile (human-editable, not tracked by git).
+
+Modified files:
+  clonebot/prompts/loader.py
+      Add load_style(clone_dir) -> dict | None
+      Parses style.md into {"dimensions": str, "samples": str}
+
+  clonebot/core/clone.py
+      build_system_prompt() injects the style block when style.md exists.
+
+  clonebot/prompts/system.md
+      Add {style_guide} placeholder between persona and memories blocks.
+
+  README.md
+      Document the style.md format and the 9 dimensions.

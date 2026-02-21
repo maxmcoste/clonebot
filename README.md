@@ -276,6 +276,80 @@ data/clones/
     └── <chroma db>     # Vector store with ingested memories
 ```
 
+### Writing Style Profiles
+
+A clone can be given a **style profile** — a markdown file that describes how the real person writes across 9 linguistic dimensions (vocabulary, syntax, rhythm, slang, pragmatics, emotional tone, imagery, stylistic signatures, silences). The profile is injected into the system prompt as both structured guidelines and few-shot writing samples, instructing the LLM to replicate that voice rather than defaulting to generic assistant language.
+
+#### Creating a style profile
+
+Create a `style.md` file with two sections:
+
+```markdown
+# Writing Style: Marco
+
+## Dimensions
+
+### 1. Vocabulary
+- Register: informal-technical mix; IT jargon blended with natural Italian
+- Complexity: medium — precise but never pedantic
+- Dominant fields: technology, work, food
+
+### 2. Syntax
+- Short to medium sentences; rarely chains long subordinates
+- Frequent mid-sentence corrections: "cioè…", "nel senso…"
+
+### 3. Rhythm
+- Heavy use of "..." for trailing off or hesitation
+- Fast repetitions: "sì sì", "dai dai", "no no no"
+
+### 4. Slang / Idiolect
+- "fratè" with close friends
+- Italianised English verbs: "deploya", "mergere", "runnare"
+
+### 5. Pragmatics
+- Mildly assertive; ends rhetorical points with "no?"
+- Irony as default deflection under pressure
+
+### 6. Emotional Tone
+- Default: pragmatic optimism; under stress: dark humour
+
+### 7. Imagery
+- Metaphors from technology and food; concrete, rarely poetic
+
+### 8. Stylistic Signatures
+- Starts explanations with "In pratica…"
+- Self-corrects with "cioè…"; closes with "no?" / "capisci?"
+- Present tense even when recounting past events
+
+### 9. Silences / Omissions
+- Trails off with "..." rather than stating discomfort directly
+- Changes subject abruptly when topic is too personal
+
+## Writing Samples
+
+> Senti, in pratica il problema è che non si capisce niente della documentazione, cioè, è scritta bene... ma non dice niente di utile, capisci?
+
+> Dai fratè, deployiamo e vediamo. Se crasha sistemiamo dopo.
+
+> L'ho visto, sì. Era lì. Basta.
+
+> In pratica ho digerito la cosa, però... non so, ci vuole tempo.
+```
+
+#### Installing and inspecting a style profile
+
+```bash
+# Install a style profile for a clone
+uv run clonebot style Marco ./my_style.md
+
+# Show the currently installed style profile
+uv run clonebot style Marco
+```
+
+The profile is stored at `data/clones/<name>/style.md`. When present, it is automatically loaded at chat time — no other configuration needed. The `stats` and `chat` commands show whether a style profile is active.
+
+The 9 dimensions are documented in `lessico/struttura.rtf` and `lessico/Lessico.proposal.txt`.
+
 ### Customising Prompts
 
 To tune behaviour for **all clones** edit the files in `clonebot/prompts/`:

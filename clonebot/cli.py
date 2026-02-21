@@ -226,17 +226,94 @@ def stats(name: str = typer.Argument(help="Clone name")):
     store = VectorStore(profile.get_dir(), embedder)
     info = store.stats()
 
+    style_path = profile.get_dir() / "style.md"
+    style_status = "[green]configured[/green]" if style_path.exists() else "[dim]not set[/dim]"
+
     panel = Panel(
         f"[cyan]Clone:[/cyan] {profile.name}\n"
         f"[cyan]Language:[/cyan] {profile.language}\n"
         f"[cyan]Description:[/cyan] {profile.description or '-'}\n"
         f"[cyan]Traits:[/cyan] {', '.join(profile.personality_traits) or '-'}\n"
         f"[cyan]Knowledge domains:[/cyan] {', '.join(profile.knowledge_domains) or '-'}\n"
+        f"[cyan]Writing style:[/cyan] {style_status}\n"
         f"[cyan]Total chunks:[/cyan] {info['total_chunks']}\n"
         f"[cyan]DB path:[/cyan] {info['db_path']}",
         title=f"Stats: {name}",
     )
     console.print(panel)
+
+
+@app.command()
+def style(
+    name: str = typer.Argument(help="Clone name"),
+    source: str = typer.Argument(
+        None,
+        help="Path to a style.md file to install for this clone. Omit to show current style.",
+    ),
+):
+    """Set or show the writing style profile for a clone.
+
+    A style profile is a markdown file with two sections:
+    '## Dimensions' (9 linguistic dimensions) and
+    '## Writing Samples' (real excerpts as blockquotes).
+    See lessico/struttura.rtf and Lessico.proposal.txt for the format.
+
+    Example:
+      clonebot style Marco ./my_style.md
+    """
+    from clonebot.core.clone import CloneProfile
+    from clonebot.prompts.loader import PromptLoader
+
+    profile = CloneProfile.load(name)
+    clone_dir = profile.get_dir()
+    style_path = clone_dir / "style.md"
+
+    if source is None:
+        # Show current style
+        if not style_path.exists():
+            console.print(f"[yellow]No style profile set for '{name}'.[/yellow]")
+            console.print(
+                "To set one: [bold]clonebot style {name} <path-to-style.md>[/bold]"
+            )
+            raise typer.Exit(0)
+
+        loader = PromptLoader(clone_dir=clone_dir)
+        data = loader.load_style()
+        if not data:
+            console.print(f"[yellow]style.md found but could not be parsed.[/yellow]")
+            raise typer.Exit(1)
+
+        console.print(Panel(
+            f"[bold]Dimensions[/bold]\n{data['dimensions']}\n\n"
+            f"[bold]Writing Samples[/bold]\n{data['samples']}",
+            title=f"Writing Style: {name}",
+        ))
+        return
+
+    # Install style file
+    src = Path(source).resolve()
+    if not src.exists():
+        console.print(f"[red]File not found: {src}[/red]")
+        raise typer.Exit(1)
+
+    import shutil
+    shutil.copy2(src, style_path)
+
+    # Validate it parses correctly
+    loader = PromptLoader(clone_dir=clone_dir)
+    data = loader.load_style()
+    if not data:
+        console.print(
+            "[red]File copied but could not be parsed. "
+            "Ensure it has ## Dimensions and ## Writing Samples sections.[/red]"
+        )
+        raise typer.Exit(1)
+
+    sample_count = len([l for l in data["samples"].splitlines() if l.strip()])
+    console.print(
+        f"[green]Style profile installed for '{name}'.[/green] "
+        f"[dim]({sample_count} sample line(s) loaded)[/dim]"
+    )
 
 
 @app.command()
@@ -273,10 +350,14 @@ def chat(
         retriever=retriever,
     )
 
+    style_path = profile.get_dir() / "style.md"
+    style_status = "on" if style_path.exists() else "off"
+
     console.print(Panel(
         f"Chatting with [bold cyan]{profile.name}[/bold cyan]\n"
         f"Language: {profile.language}\n"
         f"Memories: {store.count()} chunks loaded\n"
+        f"Writing style: {style_status}\n"
         f"Provider: {settings.llm_provider} / {settings.llm_model}\n"
         f"Type [bold]quit[/bold] or [bold]exit[/bold] to end",
         title="CloneBot Chat",
