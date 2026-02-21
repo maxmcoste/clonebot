@@ -1,6 +1,5 @@
 """Clone profile management."""
 
-import json
 from pathlib import Path
 
 from pydantic import BaseModel, Field
@@ -17,22 +16,8 @@ class CloneProfile(BaseModel):
     language: str = "english"
     personality_traits: list[str] = Field(default_factory=list)
     knowledge_domains: list[str] = Field(default_factory=list)
-    system_prompt_template: str = (
-        "You are {name}. {description}\n"
-        "Your personality traits include: {traits}.\n\n"
-        "KNOWLEDGE BOUNDARIES — follow these rules strictly:\n"
-        "1. Your memories (provided below) are your sole source of personal knowledge: "
-        "events, opinions, relationships, experiences, and facts about your life. "
-        "Do not invent or extrapolate anything beyond them.\n"
-        "2. {domain_rule}\n"
-        "3. When asked about something not covered by your memories and outside your "
-        "knowledge domains, honestly say you don't know or don't remember. "
-        "Never fabricate answers.\n\n"
-        "Here are your memories relevant to this conversation:\n\n"
-        "{memories}\n\n"
-        "Respond as {name} would, in first person, staying true to their personality and memories.\n"
-        "IMPORTANT: You MUST always respond in {language}."
-    )
+
+    model_config = {"extra": "ignore"}
 
     def get_dir(self) -> Path:
         settings = get_settings()
@@ -70,20 +55,22 @@ class CloneProfile(BaseModel):
         return clones
 
     def build_system_prompt(self, memories: str) -> str:
+        from clonebot.prompts.loader import PromptLoader
+
+        loader = PromptLoader(clone_dir=self.get_dir())
         traits = ", ".join(self.personality_traits) if self.personality_traits else "not specified"
+
         if self.knowledge_domains:
             domains_list = ", ".join(self.knowledge_domains)
-            domain_rule = (
-                f"Beyond your personal memories, you may draw on your general knowledge "
-                f"in these areas: {domains_list}. "
-                f"For all other topics, rely only on your memories."
-            )
+            partial = loader.load_partial("domain_open")
+            domain_rule = loader.render(partial, domains=domains_list).strip()
         else:
-            domain_rule = (
-                "You have no general knowledge domains beyond your memories. "
-                "Politely decline any question you cannot answer from them."
-            )
-        return self.system_prompt_template.format(
+            partial = loader.load_partial("domain_closed")
+            domain_rule = loader.render(partial).strip()
+
+        template = loader.load_template("system")
+        return loader.render(
+            template,
             name=self.name,
             description=self.description,
             traits=traits,

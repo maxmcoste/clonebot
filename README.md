@@ -242,6 +242,11 @@ clonebot/
 ├── core/
 │   ├── clone.py        # Clone profile model (create, save, load)
 │   └── session.py      # Chat session with history management
+├── prompts/            # Prompt templates (edit these to tune behaviour)
+│   ├── system.md       # Main system prompt template (global default)
+│   └── partials/
+│       ├── domain_open.md    # Knowledge rule when --domains is set
+│       └── domain_closed.md  # Knowledge rule when no domains are set
 ├── media/
 │   ├── vision.py       # Vision LLM analysis (OpenAI / Anthropic)
 │   ├── video.py        # Frame and audio extraction (OpenCV / ffmpeg)
@@ -263,7 +268,22 @@ clonebot/
 ├── voice/              # (planned)
 ├── style/              # (planned)
 └── avatar/             # (planned)
+
+data/clones/
+└── <clone-name>/
+    ├── profile.json    # Clone profile (name, traits, domains, language)
+    ├── system.md       # Optional per-clone prompt override
+    └── <chroma db>     # Vector store with ingested memories
 ```
+
+### Customising Prompts
+
+To tune behaviour for **all clones** edit the files in `clonebot/prompts/`:
+- `system.md` — the main template; available variables: `{name}`, `{description}`, `{traits}`, `{domain_rule}`, `{memories}`, `{language}`
+- `partials/domain_open.md` — injected as `{domain_rule}` when `--domains` is configured; also has `{domains}`
+- `partials/domain_closed.md` — injected as `{domain_rule}` when no domains are set
+
+To override the prompt for a **single clone**, drop a `system.md` file inside its data directory (`data/clones/<name>/system.md`). It takes precedence over the global default while partials remain shared.
 
 ## License
 
