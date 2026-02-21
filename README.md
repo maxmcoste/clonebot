@@ -90,6 +90,27 @@ uv run clonebot create "Marco" \
 
 Supported languages: `english`, `italian`.
 
+#### Knowledge Boundaries
+
+By default, a clone answers **only from its ingested memories**. If a question has no relevant memory, the clone will say it doesn't know rather than hallucinate an answer.
+
+Use `--domains` to declare areas of general knowledge the clone is allowed to draw on beyond their memories — for example, their profession or a strong passion:
+
+```bash
+uv run clonebot create "Marco" \
+  --description "Architect and Inter Milan supporter" \
+  --traits "analytical,passionate,opinionated" \
+  --language italian \
+  --domains "architecture, urban design, Italian football, Inter Milan"
+```
+
+The clone will:
+- Answer freely on topics within the declared domains (e.g. architectural styles, Serie A standings)
+- Rely exclusively on ingested memories for everything else (personal life, opinions, relationships)
+- Honestly say "I don't know / I don't remember" for questions outside both
+
+You can add or update knowledge domains later by re-running `create` with the same name (it overwrites the profile, memories are preserved).
+
 ### Ingest Memory Data
 
 Feed the clone text data so it has memories to draw from:

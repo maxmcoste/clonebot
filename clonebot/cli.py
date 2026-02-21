@@ -27,6 +27,15 @@ def create(
     description: str = typer.Option("", "--description", "-d", help="Description of the person"),
     traits: str = typer.Option("", "--traits", "-t", help="Comma-separated personality traits"),
     language: str = typer.Option("english", "--language", "-l", help="Response language (english, italian)"),
+    domains: str = typer.Option(
+        "",
+        "--domains",
+        help=(
+            "Comma-separated general knowledge domains the clone may draw on beyond their "
+            "ingested memories (e.g. 'architecture, Italian football, cooking'). "
+            "All other topics require a matching memory."
+        ),
+    ),
 ):
     """Create a new clone profile."""
     from clonebot.core.clone import CloneProfile, SUPPORTED_LANGUAGES
@@ -37,15 +46,19 @@ def create(
         raise typer.Exit(1)
 
     personality = [t.strip() for t in traits.split(",") if t.strip()] if traits else []
+    knowledge_domains = [d.strip() for d in domains.split(",") if d.strip()] if domains else []
 
     profile = CloneProfile(
         name=name,
         description=description,
         language=lang,
         personality_traits=personality,
+        knowledge_domains=knowledge_domains,
     )
     path = profile.save()
     console.print(f"[green]Created clone '{name}' ({lang}) at {path.parent}[/green]")
+    if knowledge_domains:
+        console.print(f"[dim]Knowledge domains: {', '.join(knowledge_domains)}[/dim]")
 
 
 @app.command(name="list")
@@ -63,6 +76,7 @@ def list_clones():
     table.add_column("Language", style="magenta")
     table.add_column("Description")
     table.add_column("Traits")
+    table.add_column("Knowledge Domains")
 
     for clone in clones:
         table.add_row(
@@ -70,6 +84,7 @@ def list_clones():
             clone.language,
             clone.description or "-",
             ", ".join(clone.personality_traits) if clone.personality_traits else "-",
+            ", ".join(clone.knowledge_domains) if clone.knowledge_domains else "-",
         )
     console.print(table)
 
@@ -216,6 +231,7 @@ def stats(name: str = typer.Argument(help="Clone name")):
         f"[cyan]Language:[/cyan] {profile.language}\n"
         f"[cyan]Description:[/cyan] {profile.description or '-'}\n"
         f"[cyan]Traits:[/cyan] {', '.join(profile.personality_traits) or '-'}\n"
+        f"[cyan]Knowledge domains:[/cyan] {', '.join(profile.knowledge_domains) or '-'}\n"
         f"[cyan]Total chunks:[/cyan] {info['total_chunks']}\n"
         f"[cyan]DB path:[/cyan] {info['db_path']}",
         title=f"Stats: {name}",

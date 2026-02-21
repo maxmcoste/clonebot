@@ -16,12 +16,21 @@ class CloneProfile(BaseModel):
     description: str = ""
     language: str = "english"
     personality_traits: list[str] = Field(default_factory=list)
+    knowledge_domains: list[str] = Field(default_factory=list)
     system_prompt_template: str = (
-        "You are {name}. {description} "
-        "Your personality traits include: {traits}. "
-        "Here are some of your memories relevant to this conversation:\n\n"
+        "You are {name}. {description}\n"
+        "Your personality traits include: {traits}.\n\n"
+        "KNOWLEDGE BOUNDARIES — follow these rules strictly:\n"
+        "1. Your memories (provided below) are your sole source of personal knowledge: "
+        "events, opinions, relationships, experiences, and facts about your life. "
+        "Do not invent or extrapolate anything beyond them.\n"
+        "2. {domain_rule}\n"
+        "3. When asked about something not covered by your memories and outside your "
+        "knowledge domains, honestly say you don't know or don't remember. "
+        "Never fabricate answers.\n\n"
+        "Here are your memories relevant to this conversation:\n\n"
         "{memories}\n\n"
-        "Respond as {name} would, staying true to their personality and memories. "
+        "Respond as {name} would, in first person, staying true to their personality and memories.\n"
         "IMPORTANT: You MUST always respond in {language}."
     )
 
@@ -62,10 +71,23 @@ class CloneProfile(BaseModel):
 
     def build_system_prompt(self, memories: str) -> str:
         traits = ", ".join(self.personality_traits) if self.personality_traits else "not specified"
+        if self.knowledge_domains:
+            domains_list = ", ".join(self.knowledge_domains)
+            domain_rule = (
+                f"Beyond your personal memories, you may draw on your general knowledge "
+                f"in these areas: {domains_list}. "
+                f"For all other topics, rely only on your memories."
+            )
+        else:
+            domain_rule = (
+                "You have no general knowledge domains beyond your memories. "
+                "Politely decline any question you cannot answer from them."
+            )
         return self.system_prompt_template.format(
             name=self.name,
             description=self.description,
             traits=traits,
+            domain_rule=domain_rule,
             memories=memories,
             language=self.language,
         )
