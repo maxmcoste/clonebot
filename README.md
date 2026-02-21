@@ -132,8 +132,39 @@ uv run clonebot ingest Marco vacation.mp4 --tags "hawaii,vacation"
 
 **Flags:**
 - `--tags / -t` — comma-separated relationship or context tags (e.g. `"daughter,birthday"`)
-- `--description / -d` — manual text description of the media
+- `--description / -d` — rich, free-form description of the media (see below)
 - `--no-vision` — skip AI vision analysis (requires `--description` for media files)
+
+#### Writing Rich Descriptions
+
+The `--description` flag accepts any length of free-form text. Use it to capture context that a vision model cannot infer from pixels alone — location, occasion, who the people are, and what the moment meant.
+
+This description serves two purposes:
+1. It is stored **verbatim** in the memory chunk and is always retrieved as-is during chat.
+2. It is passed to the vision LLM as **context**, helping it produce a richer and more accurate visual analysis (e.g. correctly identifying people by name, understanding the occasion).
+
+```bash
+# Rich contextual description for a photo
+uv run clonebot ingest Marco ./photos/massimo_cena.jpg \
+  --tags "amico stretto, collega" \
+  --description "Foto scattata a Milano nel dicembre 2018 durante la cena di Natale \
+aziendale al ristorante Trattoria da Pino in zona Navigli. Nella foto sono con Massimo, \
+il mio collega più stretto dal 2015 e amico di vecchia data. Stiamo brindando alla \
+chiusura di un progetto importante che avevamo portato avanti insieme per un anno. \
+È una serata che ricordo con molto affetto."
+
+# Using --no-vision when you want to store only your description (no API call)
+uv run clonebot ingest Marco ./photos/massimo_cena.jpg \
+  --tags "amico stretto, collega" \
+  --no-vision \
+  --description "Cena di Natale 2018 con Massimo a Milano. Brindisi dopo la chiusura del progetto."
+```
+
+Good things to include in a description:
+- **Who** is in the photo/video and your relationship to them
+- **Where** it was taken (city, venue, occasion)
+- **When** (year, season, or specific event)
+- **Why** it matters — the mood, what was being celebrated, a memory it triggers
 
 **Vision providers:** Configure with `CLONEBOT_VISION_PROVIDER` (`openai` or `anthropic`) and `CLONEBOT_VISION_MODEL`. Audio transcription uses OpenAI Whisper. Video audio extraction requires `ffmpeg` (optional — gracefully skipped if not installed).
 
