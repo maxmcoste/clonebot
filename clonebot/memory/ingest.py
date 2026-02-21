@@ -12,7 +12,7 @@ from clonebot.config.settings import get_settings
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 VIDEO_EXTENSIONS = {".mp4", ".mov", ".avi", ".mkv"}
-TEXT_EXTENSIONS = {".txt", ".md", ".json", ".pdf", ".csv", ".docx"}
+TEXT_EXTENSIONS = {".txt", ".md", ".json", ".pdf", ".csv", ".docx", ".doc"}
 
 
 def ingest_file(
@@ -21,7 +21,18 @@ def ingest_file(
     description: str = "",
     use_vision: bool = True,
 ) -> list[Chunk]:
-    """Ingest a single file and return chunks."""
+    """Ingest a single file and return chunks.
+
+    Raises
+    ------
+    FileTypeMismatchError
+        If the file's content does not match its declared extension.
+    ValueError
+        If the file extension is not supported.
+    """
+    from clonebot.memory.validate import validate_file_type
+    validate_file_type(file_path)
+
     suffix = file_path.suffix.lower()
     meta = {"source": file_path.name, "source_path": str(file_path)}
 
@@ -39,6 +50,8 @@ def ingest_file(
         return _ingest_csv(file_path, meta)
     elif suffix == ".docx":
         return _ingest_docx(file_path, meta)
+    elif suffix == ".doc":
+        return _ingest_doc(file_path, meta)
     else:
         raise ValueError(f"Unsupported file type: {suffix}")
 
@@ -48,16 +61,36 @@ def ingest_directory(
     tags: list[str] | None = None,
     description: str = "",
     use_vision: bool = True,
-) -> list[Chunk]:
-    """Ingest all supported files in a directory."""
+) -> tuple[list[Chunk], list[tuple[Path, str]]]:
+    """Ingest all supported files in a directory.
+
+    Each file is validated (magic bytes vs. extension) before ingestion.
+    Files that fail validation or raise any other error are skipped and their
+    path + reason are collected in the returned error list so the caller can
+    report them without aborting the whole batch.
+
+    Returns
+    -------
+    chunks : list[Chunk]
+        All successfully ingested chunks.
+    errors : list[tuple[Path, str]]
+        One entry per skipped file: (file_path, human-readable reason).
+    """
     supported = TEXT_EXTENSIONS | IMAGE_EXTENSIONS | VIDEO_EXTENSIONS
     all_chunks: list[Chunk] = []
+    errors: list[tuple[Path, str]] = []
 
     for f in sorted(dir_path.rglob("*")):
-        if f.is_file() and f.suffix.lower() in supported:
-            all_chunks.extend(ingest_file(f, tags=tags, description=description, use_vision=use_vision))
+        if not (f.is_file() and f.suffix.lower() in supported):
+            continue
+        try:
+            all_chunks.extend(
+                ingest_file(f, tags=tags, description=description, use_vision=use_vision)
+            )
+        except Exception as e:
+            errors.append((f, str(e)))
 
-    return all_chunks
+    return all_chunks, errors
 
 
 def _build_media_text(
@@ -277,6 +310,48 @@ def _ingest_docx(path: Path, meta: dict[str, str]) -> list[Chunk]:
     meta["format"] = "docx"
     settings = get_settings()
     return chunk_text(text, chunk_size=settings.chunk_size, overlap=settings.chunk_overlap, metadata=meta)
+
+
+def _ingest_doc(path: Path, meta: dict[str, str]) -> list[Chunk]:
+    """Ingest a legacy .doc file by converting to plain text.
+
+    Tries converters in order:
+    1. antiword   — brew install antiword
+    2. pypandoc   — pip install pypandoc + brew install pandoc
+    """
+    text = _convert_doc_to_text(path)
+    meta["format"] = "doc"
+    settings = get_settings()
+    return chunk_text(text, chunk_size=settings.chunk_size, overlap=settings.chunk_overlap, metadata=meta)
+
+
+def _convert_doc_to_text(path: Path) -> str:
+    """Convert a legacy .doc file to plain text using available system tools."""
+    import subprocess
+
+    # 1. Try antiword (fast, lightweight: brew install antiword)
+    if shutil.which("antiword"):
+        result = subprocess.run(
+            ["antiword", str(path)],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout
+
+    # 2. Try pypandoc (requires pandoc: brew install pandoc)
+    try:
+        import pypandoc
+        return pypandoc.convert_file(str(path), "plain", format="doc")
+    except Exception:
+        pass
+
+    raise RuntimeError(
+        f"Cannot read '{path.name}': no legacy .doc converter found.\n"
+        "Install one of:\n"
+        "  • antiword:  brew install antiword\n"
+        "  • pandoc:    brew install pandoc  (and pip install pypandoc)"
+    )
 
 
 # WhatsApp format: "1/2/24, 12:34 - Name: message"

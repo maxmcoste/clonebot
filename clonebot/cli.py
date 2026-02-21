@@ -83,8 +83,14 @@ def ingest(
     no_vision: bool = typer.Option(False, "--no-vision", help="Skip AI vision analysis (requires --description for media)"),
 ):
     """Ingest memory data into a clone."""
+    from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, MofNCompleteColumn
+
     from clonebot.core.clone import CloneProfile
-    from clonebot.memory.ingest import ingest_file, ingest_directory, IMAGE_EXTENSIONS, VIDEO_EXTENSIONS
+    from clonebot.memory.ingest import (
+        ingest_file, ingest_directory,
+        TEXT_EXTENSIONS, IMAGE_EXTENSIONS, VIDEO_EXTENSIONS,
+    )
+    from clonebot.memory.validate import FileTypeMismatchError
     from clonebot.memory.embeddings import get_embedding_provider
     from clonebot.memory.store import VectorStore
 
@@ -106,19 +112,86 @@ def ingest(
             console.print("[red]--no-vision requires --description for media files[/red]")
             raise typer.Exit(1)
 
-    with console.status("[bold blue]Ingesting data..."):
-        if file_path.is_dir():
-            chunks = ingest_directory(file_path, tags=tag_list, description=description, use_vision=use_vision)
-        else:
-            chunks = ingest_file(file_path, tags=tag_list, description=description, use_vision=use_vision)
+    # ------------------------------------------------------------------ #
+    #  Directory ingestion — per-file progress bar with skip reporting    #
+    # ------------------------------------------------------------------ #
+    if file_path.is_dir():
+        supported = TEXT_EXTENSIONS | IMAGE_EXTENSIONS | VIDEO_EXTENSIONS
+        files = [
+            f for f in sorted(file_path.rglob("*"))
+            if f.is_file() and f.suffix.lower() in supported
+        ]
 
-        if not chunks:
-            console.print("[yellow]No data to ingest from the provided path.[/yellow]")
+        if not files:
+            console.print("[yellow]No supported files found in directory.[/yellow]")
             raise typer.Exit(1)
 
+        chunks: list = []
+        skipped: list[tuple[str, str]] = []  # (filename, reason)
+
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[bold blue]{task.description}"),
+            BarColumn(),
+            MofNCompleteColumn(),
+            console=console,
+            transient=False,
+        ) as progress:
+            task = progress.add_task("Scanning…", total=len(files))
+
+            for f in files:
+                progress.update(task, description=f"[cyan]{f.name}[/cyan]")
+                try:
+                    file_chunks = ingest_file(
+                        f, tags=tag_list, description=description, use_vision=use_vision
+                    )
+                    chunks.extend(file_chunks)
+                    progress.print(
+                        f"  [green]✓[/green] {f.name} "
+                        f"[dim]({len(file_chunks)} chunk{'s' if len(file_chunks) != 1 else ''})[/dim]"
+                    )
+                except FileTypeMismatchError as e:
+                    skipped.append((f.name, str(e)))
+                    progress.print(f"  [yellow]⚠ Skipped[/yellow]  {e}")
+                except Exception as e:
+                    skipped.append((f.name, str(e)))
+                    progress.print(f"  [red]✗ Error[/red]    {f.name}: {e}")
+                finally:
+                    progress.advance(task)
+
+            progress.update(task, description="Done")
+
+        if skipped:
+            console.print(
+                f"\n[yellow]Skipped {len(skipped)} file(s) "
+                f"({len(files) - len(skipped)} ingested successfully)[/yellow]"
+            )
+        if not chunks:
+            console.print("[yellow]No data was ingested — all files were skipped.[/yellow]")
+            raise typer.Exit(1)
+
+    # ------------------------------------------------------------------ #
+    #  Single-file ingestion                                               #
+    # ------------------------------------------------------------------ #
+    else:
+        with console.status("[bold blue]Ingesting…"):
+            try:
+                chunks = ingest_file(
+                    file_path, tags=tag_list, description=description, use_vision=use_vision
+                )
+            except FileTypeMismatchError as e:
+                console.print(f"[red]File type mismatch — {e}[/red]")
+                raise typer.Exit(1)
+
+        if not chunks:
+            console.print("[yellow]No data to ingest from the provided file.[/yellow]")
+            raise typer.Exit(1)
         console.print(f"  Chunked into {len(chunks)} pieces")
 
-    with console.status("[bold blue]Generating embeddings and storing..."):
+    # ------------------------------------------------------------------ #
+    #  Embed and store                                                     #
+    # ------------------------------------------------------------------ #
+    with console.status("[bold blue]Generating embeddings and storing…"):
         embedder = get_embedding_provider()
         store = VectorStore(profile.get_dir(), embedder)
         count = store.add_documents(chunks)

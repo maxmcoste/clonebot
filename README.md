@@ -34,6 +34,9 @@ LLM Provider (OpenAI / Anthropic / Ollama) ──► Streamed response
 
 - Python 3.12+
 - [uv](https://docs.astral.sh/uv/) package manager
+- To ingest legacy `.doc` files (Word 97–2003), one of:
+  - `antiword` — `brew install antiword` *(recommended, lightweight)*
+  - `pandoc` — `brew install pandoc` *(fallback, also needs `pip install pypandoc`)*
 
 ## Installation
 
@@ -95,9 +98,22 @@ Feed the clone text data so it has memories to draw from:
 # Ingest a single file
 uv run clonebot ingest Marco ./sample_chats_marco.txt
 
-# Ingest an entire directory
+# Ingest an entire directory (all supported formats, recursive)
 uv run clonebot ingest Marco ./data/marco/
 ```
+
+#### Directory Ingestion
+
+When a directory is provided, CloneBot walks it recursively, picks up every file whose extension is supported, and shows a per-file progress bar:
+
+```
+  ✓ journal_2023.txt   (12 chunks)
+  ✓ trip_report.docx   (5 chunks)
+  ⚠ Skipped  'notes.pdf': extension is '.pdf' but file content is OLE2 document (.doc/.xls/.ppt)
+  ✓ vacation.mp4       (1 chunk)
+```
+
+Files whose content does **not** match their extension (e.g. a `.txt` file that is actually a binary Word document) are automatically detected via magic-byte inspection, skipped with a warning, and the rest of the batch continues normally.
 
 #### Media Memories (Photos & Videos)
 
@@ -129,9 +145,12 @@ uv run clonebot ingest Marco vacation.mp4 --tags "hawaii,vacation"
 | JSON | `.json` | Detects structured chat exports with `sender`/`text` fields |
 | CSV | `.csv` | Detects chat-like CSVs with sender/message columns |
 | PDF | `.pdf` | Extracts text from all pages |
-| Word | `.docx` | Extracts paragraph text |
+| Word (modern) | `.docx` | Extracts paragraph text via `python-docx` |
+| Word (legacy) | `.doc` | Converts to text via `antiword` (preferred) or `pandoc`; requires one to be installed |
 | Images | `.jpg`, `.jpeg`, `.png`, `.gif`, `.webp` | Vision AI analysis with relationship tags |
 | Videos | `.mp4`, `.mov`, `.avi`, `.mkv` | Frame extraction + vision analysis + audio transcription |
+
+> **File-type validation** — every file is inspected by its magic bytes before parsing. If the extension does not match the actual content (e.g. a `.txt` file that contains a binary PDF), the file is rejected with a clear error message. In directory mode the offending file is skipped and ingestion continues; in single-file mode an error is shown and the command exits.
 
 ### List Clones
 
@@ -179,6 +198,7 @@ clonebot/
 │   ├── chunker.py      # Text and chat-aware chunking
 │   ├── embeddings.py   # Embedding providers (local / OpenAI)
 │   ├── ingest.py       # File parsing and ingestion pipeline
+│   ├── validate.py     # Magic-byte file-type validator
 │   └── store.py        # ChromaDB vector store
 ├── rag/
 │   ├── prompt.py       # System prompt builder
